@@ -20,9 +20,11 @@ const std::string k_keepFocused = "plugin:split-monitor-workspaces:keep_focused"
 const CColor s_pluginColor = {0x61 / 255.0f, 0xAF / 255.0f, 0xEF / 255.0f, 1.0f};
 
 std::map<uint64_t, std::vector<std::string>> g_vMonitorWorkspaceMap;
+std::map<std::string, uint64_t> g_vWorkspaceMonitorMap;
 
 static HOOK_CALLBACK_FN* e_monitorAddedHandle = nullptr;
 static HOOK_CALLBACK_FN* e_monitorRemovedHandle = nullptr;
+static HOOK_CALLBACK_FN* e_workspaceCreatedHandle = nullptr;
 
 const std::string& getWorkspaceFromMonitor(CMonitor* monitor, const std::string& workspace)
 {
@@ -119,6 +121,7 @@ void splitChangeMonitor(std::string value)
 void mapWorkspacesToMonitors()
 {
     g_vMonitorWorkspaceMap.clear();
+		g_vWorkspaceMonitorMap.clear();
 
     int workspaceIndex = 1;
 
@@ -127,14 +130,15 @@ void mapWorkspacesToMonitors()
     for (auto& monitor : g_pCompositor->m_vMonitors) {
         int workspaceCount = g_pConfigManager->getConfigValuePtrSafe(k_workspaceCount)->intValue;
         std::string logMessage =
-            "[split-monitor-workspaces] Mapping workspaces " + std::to_string(workspaceIndex) + "-" + std::to_string(workspaceIndex + workspaceCount - 1) + " to monitor " + monitor->szName;
+            "[zzsplit-monitor-workspaces] Mapping workspaces " + std::to_string(workspaceIndex) + "-" + std::to_string(workspaceIndex + workspaceCount - 1) + " to monitor " + monitor->szName;
 
         HyprlandAPI::addNotification(PHANDLE, logMessage, s_pluginColor, 5000);
 
         for (int i = workspaceIndex; i < workspaceIndex + workspaceCount; i++) {
             std::string workspaceName = std::to_string(i);
             g_vMonitorWorkspaceMap[monitor->ID].push_back(workspaceName);
-            HyprlandAPI::invokeHyprctlCommand("keyword", "workspace " + workspaceName + "," + monitor->szName);
+						g_vWorkspaceMonitorMap[workspaceName] = monitor->ID;
+            //HyprlandAPI::invokeHyprctlCommand("keyword", "workspace " + workspaceName + "," + monitor->szName);
             CWorkspace* workspace = g_pCompositor->getWorkspaceByName(workspaceName);
 
             if (workspace != nullptr) {
@@ -153,6 +157,24 @@ void refreshMapping(void*, SCallbackInfo&, std::any)
 {
     mapWorkspacesToMonitors();
 }
+
+void workspaceCreated(void *self, SCallbackInfo& cinfo, std::any data)
+{
+
+
+	CWorkspace *workspace = nullptr;
+	try {
+		workspace = std::any_cast<CWorkspace *>(data);
+	} catch (std::exception& e) {Debug::log(ERR, "Bad any cast for workspaceCreated: {}", e.what());}
+	if (workspace && g_vWorkspaceMonitorMap.contains(workspace->m_szName))
+	{
+		
+		uint64_t mon_id = g_vWorkspaceMonitorMap[workspace->m_szName];
+		auto * const PMONITOR = g_pCompositor->getMonitorFromID(mon_id);
+		g_pCompositor->moveWorkspaceToMonitor(workspace, PMONITOR);
+	}
+}
+
 
 // Do NOT change this function.
 APICALL EXPORT std::string PLUGIN_API_VERSION()
@@ -181,6 +203,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
 
     e_monitorAddedHandle = HyprlandAPI::registerCallbackDynamic(PHANDLE, "monitorAdded", refreshMapping);
     e_monitorRemovedHandle = HyprlandAPI::registerCallbackDynamic(PHANDLE, "monitorRemoved", refreshMapping);
+		e_workspaceCreatedHandle = HyprlandAPI::registerCallbackDynamic(PHANDLE, "createWorkspace", workspaceCreated);
 
     return {"split-monitor-workspaces", "Split monitor workspace namespaces", "Duckonaut", "1.1.0"};
 }
@@ -190,4 +213,5 @@ APICALL EXPORT void PLUGIN_EXIT()
     HyprlandAPI::addNotification(PHANDLE, "[split-monitor-workspaces] Unloaded successfully!", s_pluginColor, 5000);
 
     g_vMonitorWorkspaceMap.clear();
+		g_vWorkspaceMonitorMap.clear();
 }
