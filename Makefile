@@ -2,7 +2,7 @@ PLUGIN_NAME=split-monitor-workspaces
 
 SOURCE_FILES=$(wildcard src/*.cpp)
 
-COMPILE_FLAGS=-g -fPIC --no-gnu-unique -std=c++23
+COMPILE_FLAGS=-fPIC --no-gnu-unique -std=c++23
 COMPILE_FLAGS+=`pkg-config --cflags pixman-1 libdrm hyprland`
 COMPILE_FLAGS+=-Iinclude
 
